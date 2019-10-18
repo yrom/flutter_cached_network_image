@@ -1,5 +1,4 @@
 import 'dart:async' show Future;
-import 'dart:io' show File;
 import 'dart:typed_data';
 import 'dart:ui' as ui show instantiateImageCodec, Codec;
 
@@ -68,19 +67,19 @@ class CachedNetworkImageProvider
 
   Future<ui.Codec> _loadAsync(CachedNetworkImageProvider key) async {
     var mngr = cacheManager ?? DefaultCacheManager();
-    var file = await mngr.getImageFile(url, headers: headers);
-    if (file == null) {
+    var resource = await mngr.getImageResource(url, headers: headers);
+    if (resource == null) {
       if (errorListener != null) errorListener();
       return Future<ui.Codec>.error("Couldn't download or retrieve file.");
     }
-    return await _loadAsyncFromFile(key, file);
+    return await _loadAsyncFromResource(key, resource);
   }
 
-  Future<ui.Codec> _loadAsyncFromFile(
-      CachedNetworkImageProvider key, File file) async {
+  Future<ui.Codec> _loadAsyncFromResource(
+      CachedNetworkImageProvider key, BinaryResource resource) async {
     assert(key == this);
 
-    final Uint8List bytes = await file.readAsBytes();
+    final Uint8List bytes = await resource.readAsBytes();
 
     if (bytes.lengthInBytes == 0) {
       if (errorListener != null) errorListener();

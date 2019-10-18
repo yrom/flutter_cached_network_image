@@ -1,3 +1,4 @@
+import 'package:cached_network_image/src/scaled_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -328,7 +329,7 @@ class CachedNetworkImageState extends State<CachedNetworkImage>
                 holder: holder,
                 child: _image(
                   context,
-                  ScaledFileImage(holder.image.file,
+                  ScaledImage(holder.image.resource,
                       targetWidth: targetWidth, targetHeight: targetHeight),
                 )));
           }

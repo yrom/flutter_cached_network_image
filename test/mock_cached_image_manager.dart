@@ -8,8 +8,10 @@ class MockCacheManager extends Mock implements CacheManager {}
 
 class MockFile extends Mock implements File {}
 
-File mockFile(Uint8List bytes()) {
-  var f = MockFile();
+class MockBinaryResource extends Mock implements BinaryResource {}
+
+BinaryResource mockFile(Uint8List bytes()) {
+  var f = MockBinaryResource();
   when(f.readAsBytes()).thenAnswer((_) => Future.sync(bytes));
   when(f.readAsBytesSync()).thenReturn(bytes());
   return f;
