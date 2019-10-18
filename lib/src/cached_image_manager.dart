@@ -93,6 +93,21 @@ class ByteDataResource implements BinaryResource {
   Future<Uint8List> readAsBytes() {
     return Future.sync(readAsBytesSync);
   }
+
+  @override
+  int get hashCode => data.hashCode;
+
+  @override
+  bool operator ==(Object other) {
+    if (other.runtimeType != runtimeType) return false;
+    final ByteDataResource typedOther = other;
+    return data == typedOther.data;
+  }
+
+  @override
+  String toString() {
+    return "bytebuff:$data";
+  }
 }
 
 class FileResource implements BinaryResource {
@@ -121,6 +136,6 @@ class FileResource implements BinaryResource {
 
   @override
   String toString() {
-    return file.path;
+    return "file:${file.path}";
   }
 }
