@@ -27,6 +27,9 @@ abstract class CacheManager {
 ///  * [ScaledImage]
 ///  * [CachedNetworkImageProvider]
 abstract class BinaryResource {
+  factory BinaryResource.file(File file) => FileResource(file);
+  factory BinaryResource.memory(ByteData buff) => ByteDataResource(buff);
+
   Uint8List readAsBytesSync();
   Future<Uint8List> readAsBytes();
 }
@@ -37,8 +40,10 @@ class CachedImage {
   final BinaryResource resource;
 
   CachedImage(this.originalUrl, this.validTill, this.resource);
-  CachedImage.file(File file, this.originalUrl, this.validTill)
-      : this.resource = FileResource(file);
+  factory CachedImage.file(String originalUrl, File file,
+      {DateTime validTill}) {
+    return CachedImage(originalUrl, validTill, BinaryResource.file(file));
+  }
 }
 
 /// Default [CacheManager] implementation by package 'flutter_cache_manager'.
@@ -68,7 +73,11 @@ class DefaultCacheManager implements CacheManager {
 
   CachedImage _convert(fcm.FileInfo info) {
     if (info == null) return null;
-    return CachedImage.file(info.file, info.originalUrl, info.validTill);
+    return CachedImage.file(
+      info.originalUrl,
+      info.file,
+      validTill: info.validTill,
+    );
   }
 
   @override
