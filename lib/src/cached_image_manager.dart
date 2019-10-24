@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart' as fcm;
+
+import 'crc32.dart';
 
 /// Manager for getting [CachedImage].
 abstract class CacheManager {
@@ -17,8 +18,7 @@ abstract class CacheManager {
   Stream<CachedImage> getImage(String url, {Map<String, String> headers});
 
   /// Try to get the cached image file. Download form [url] when missing.
-  Future<BinaryResource> getImageResource(String url,
-      {Map<String, String> headers});
+  Future<BinaryResource> getImageResource(String url, {Map<String, String> headers});
 }
 
 /// Binary resource for decoding image.
@@ -27,71 +27,37 @@ abstract class CacheManager {
 ///  * [ScaledImage]
 ///  * [CachedNetworkImageProvider]
 abstract class BinaryResource {
-  factory BinaryResource.file(File file) => FileResource(file);
-  factory BinaryResource.memory(ByteData buff) => ByteDataResource(buff);
+  factory BinaryResource.file(String id, File file) = FileResource;
+
+  factory BinaryResource.memory(String id, ByteData buff) = ByteDataResource;
+
+  /// resource unique id
+  final String id;
 
   Uint8List readAsBytesSync();
+
   Future<Uint8List> readAsBytes();
+
+  /// bytes length
+  int get length;
 }
 
 class CachedImage {
   final String originalUrl;
-  final DateTime validTill;
   final BinaryResource resource;
 
-  CachedImage(this.originalUrl, this.validTill, this.resource);
-  factory CachedImage.file(String originalUrl, File file,
-      {DateTime validTill}) {
-    return CachedImage(originalUrl, validTill, BinaryResource.file(file));
-  }
-}
-
-/// Default [CacheManager] implementation by package 'flutter_cache_manager'.
-/// See https://pub.dev/packages/flutter_cache_manager for more details.
-class DefaultCacheManager implements CacheManager {
-  static DefaultCacheManager _instance;
-
-  factory DefaultCacheManager() {
-    if (_instance == null) {
-      _instance = DefaultCacheManager._(fcm.DefaultCacheManager());
-    }
-    return _instance;
-  }
-  final fcm.BaseCacheManager manager;
-
-  DefaultCacheManager._(this.manager);
-
-  @override
-  Stream<CachedImage> getImage(String imageUrl, {Map<String, String> headers}) {
-    return manager.getFile(imageUrl, headers: headers).map(_convert);
-  }
-
-  @override
-  CachedImage getImageFromMemory(String imageUrl) {
-    return _convert(manager.getFileFromMemory(imageUrl));
-  }
-
-  CachedImage _convert(fcm.FileInfo info) {
-    if (info == null) return null;
-    return CachedImage.file(
-      info.originalUrl,
-      info.file,
-      validTill: info.validTill,
-    );
-  }
-
-  @override
-  Future<BinaryResource> getImageResource(String url,
-      {Map<String, String> headers}) {
-    return manager
-        .getSingleFile(url, headers: headers)
-        .then((file) => FileResource(file));
-  }
+  CachedImage(this.originalUrl, this.resource);
 }
 
 class ByteDataResource implements BinaryResource {
   final ByteData data;
-  const ByteDataResource(this.data) : assert(data != null);
+
+  @override
+  final String id;
+
+  const ByteDataResource(this.id, this.data)
+      : assert(id != null),
+        assert(data != null);
 
   @override
   Uint8List readAsBytesSync() {
@@ -104,13 +70,21 @@ class ByteDataResource implements BinaryResource {
   }
 
   @override
-  int get hashCode => data.hashCode;
+  int get length => data.lengthInBytes;
+
+  @override
+  int get hashCode => getCrc32(readAsBytesSync());
 
   @override
   bool operator ==(Object other) {
     if (other.runtimeType != runtimeType) return false;
     final ByteDataResource typedOther = other;
-    return data == typedOther.data;
+    if (data == typedOther.data || id == typedOther.id) return true;
+    if (data.lengthInBytes == typedOther.data.lengthInBytes &&
+        data.offsetInBytes == typedOther.data.offsetInBytes) {
+      return hashCode == typedOther.hashCode;
+    }
+    return false;
   }
 
   @override
@@ -121,7 +95,13 @@ class ByteDataResource implements BinaryResource {
 
 class FileResource implements BinaryResource {
   final File file;
-  const FileResource(this.file) : assert(file != null);
+
+  @override
+  final String id;
+
+  const FileResource(this.id, this.file)
+      : assert(id != null),
+        assert(file != null);
 
   @override
   Uint8List readAsBytesSync() {
@@ -134,13 +114,16 @@ class FileResource implements BinaryResource {
   }
 
   @override
+  int get length => file.lengthSync();
+
+  @override
   int get hashCode => file.hashCode;
 
   @override
   bool operator ==(Object other) {
     if (other.runtimeType != runtimeType) return false;
     final FileResource typedOther = other;
-    return file.path == typedOther.file.path;
+    return id == typedOther.id || file.path == typedOther.file.path;
   }
 
   @override

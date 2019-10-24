@@ -5,6 +5,7 @@ import 'dart:ui' as ui show instantiateImageCodec, Codec;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'cache_manager.dart';
 import 'cached_image_manager.dart';
 
 typedef void ErrorListener();
@@ -54,14 +55,10 @@ class CachedNetworkImageProvider
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key),
       scale: key.scale,
-// TODO enable information collector on next stable release of flutter
-//      informationCollector: () sync* {
-//        yield DiagnosticsProperty<ImageProvider>(
-//          'Image provider: $this \n Image key: $key',
-//          this,
-//          style: DiagnosticsTreeStyle.errorProperty,
-//        );
-//      },
+      informationCollector: () => [
+        DiagnosticsProperty<ImageProvider>('Image provider', this),
+        DiagnosticsProperty<CachedNetworkImageProvider>('Image key', key),
+      ],
     );
   }
 
@@ -83,7 +80,7 @@ class CachedNetworkImageProvider
 
     if (bytes.lengthInBytes == 0) {
       if (errorListener != null) errorListener();
-      throw Exception("File was empty");
+      throw Exception("BinaryResource was empty");
     }
 
     return await ui.instantiateImageCodec(bytes,

@@ -1,20 +1,20 @@
-import 'dart:typed_data';
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+
 import 'cached_image_manager.dart';
 
 /// Decodes the given [BinaryResource] object as an image, associating it with the given
-/// scale. 
-class ScaledImage extends ImageProvider<ScaledImage> {
+/// scale.
+class ScaledImage extends ImageProvider<_ScaledImageKey> {
   /// Creates an object that decodes a [File] as an image.
   ///
   /// The arguments must not be null.
-  const ScaledImage(this.resource,
-      {this.scale = 1.0, this.targetHeight, this.targetWidth})
+  const ScaledImage(this.resource, {this.scale = 1.0, this.targetHeight, this.targetWidth})
       : assert(resource != null),
         assert(scale != null);
 
@@ -33,12 +33,17 @@ class ScaledImage extends ImageProvider<ScaledImage> {
   final int targetWidth;
 
   @override
-  Future<ScaledImage> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture<ScaledImage>(this);
+  Future<_ScaledImageKey> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_ScaledImageKey>(_ScaledImageKey(
+      resource.id,
+      scale: scale,
+      targetHeight: targetHeight,
+      targetWidth: targetWidth,
+    ));
   }
 
   @override
-  ImageStreamCompleter load(ScaledImage key) {
+  ImageStreamCompleter load(_ScaledImageKey key) {
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key),
       scale: key.scale,
@@ -48,14 +53,14 @@ class ScaledImage extends ImageProvider<ScaledImage> {
     );
   }
 
-  Future<Codec> _loadAsync(ScaledImage key) async {
-    assert(key == this);
+  Future<Codec> _loadAsync(_ScaledImageKey key) async {
+    assert(key.resourceId == this.resource.id);
 
-    final Uint8List bytes = await key.resource.readAsBytes();
-    if (bytes.lengthInBytes == 0) return null;
-
-    return await instantiateImageCodec(bytes,
-        targetWidth: targetWidth, targetHeight: targetHeight);
+    final Uint8List bytes = await this.resource.readAsBytes();
+    if (bytes.lengthInBytes == 0) {
+      throw Exception("Can not instantiate image codec for zero length bytes");
+    }
+    return await instantiateImageCodec(bytes, targetWidth: targetWidth, targetHeight: targetHeight);
   }
 
   @override
@@ -74,4 +79,38 @@ class ScaledImage extends ImageProvider<ScaledImage> {
   @override
   String toString() => '$runtimeType("$resource", scale: $scale, '
       'targetHeight: $targetHeight, targetWidth: $targetWidth)';
+}
+
+class _ScaledImageKey {
+  String resourceId;
+  double scale;
+  int targetWidth;
+  int targetHeight;
+
+  _ScaledImageKey(
+    this.resourceId, {
+    this.scale,
+    this.targetWidth,
+    this.targetHeight,
+  });
+
+
+  @override
+  String toString() {
+    return '_ScaledImageKey: $resourceId';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is _ScaledImageKey &&
+            runtimeType == other.runtimeType &&
+            resourceId == other.resourceId &&
+            scale == other.scale &&
+            targetWidth == other.targetWidth &&
+            targetHeight == other.targetHeight;
+  }
+
+  @override
+  int get hashCode => hashValues(resourceId, scale, targetWidth, targetHeight);
 }

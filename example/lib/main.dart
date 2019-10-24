@@ -1,8 +1,15 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 void main() => runApp(MyApp());
-
+var defaultCacheManager = DefaultCacheManager(_getImagePath());
+Future<String> _getImagePath() async {
+  Directory dir = await getTemporaryDirectory();
+  return p.join(dir.path, 'example');
+}
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -29,6 +36,7 @@ class MyHomePage extends StatelessWidget {
               Image(
                 image: CachedNetworkImageProvider(
                   'http://via.placeholder.com/350x150',
+                  cacheManager: defaultCacheManager,
                 ),
               ),
             ),
@@ -36,11 +44,13 @@ class MyHomePage extends StatelessWidget {
               CachedNetworkImage(
                 placeholder: (context, url) => CircularProgressIndicator(),
                 imageUrl: 'http://via.placeholder.com/200x150',
+                cacheManager: defaultCacheManager,
               ),
             ),
             _sizedContainer(
               CachedNetworkImage(
                 imageUrl: 'http://via.placeholder.com/300x150',
+                cacheManager: defaultCacheManager,
                 imageBuilder: (context, imageProvider) => Container(
                   decoration: BoxDecoration(
                     image: DecorationImage(
@@ -59,6 +69,7 @@ class MyHomePage extends StatelessWidget {
             ),
             _sizedContainer(
               CachedNetworkImage(
+                cacheManager: defaultCacheManager,
                 imageUrl: 'http://notAvalid.uri',
                 placeholder: (context, url) => CircularProgressIndicator(),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
@@ -67,6 +78,7 @@ class MyHomePage extends StatelessWidget {
             _sizedContainer(
               CachedNetworkImage(
                 imageUrl: 'not a uri at all',
+                cacheManager: defaultCacheManager,
                 placeholder: (context, url) => CircularProgressIndicator(),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
@@ -74,6 +86,7 @@ class MyHomePage extends StatelessWidget {
             _sizedContainer(
               CachedNetworkImage(
                 imageUrl: 'http://via.placeholder.com/350x200',
+                cacheManager: defaultCacheManager,
                 placeholder: (context, url) => CircularProgressIndicator(),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
                 fadeOutDuration: const Duration(seconds: 1),
@@ -93,7 +106,8 @@ class MyHomePage extends StatelessWidget {
           const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3),
       itemBuilder: (BuildContext context, int index) => CachedNetworkImage(
         imageUrl: 'http://via.placeholder.com/'
-            '${(index + 1)}x${(index % 100 + 1)}',
+            '${(index + 1)}',
+        cacheManager: defaultCacheManager,
         placeholder: _loader,
         errorWidget: _error,
       ),
@@ -104,7 +118,7 @@ class MyHomePage extends StatelessWidget {
         child: CircularProgressIndicator(),
       );
 
-  Widget _error(BuildContext context, String url, Exception error) {
+  Widget _error(BuildContext context, String url, Object error) {
     print(error);
     return Center(child: const Icon(Icons.error));
   }
