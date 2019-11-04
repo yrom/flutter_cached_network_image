@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cached_network_image/src/scaled_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -140,21 +139,21 @@ class CachedNetworkImage extends StatefulWidget {
     this.imageBuilder,
     this.placeholder,
     this.errorWidget,
-    this.fadeOutDuration: const Duration(milliseconds: 1000),
-    this.fadeOutCurve: Curves.easeOut,
-    this.fadeInDuration: const Duration(milliseconds: 500),
-    this.fadeInCurve: Curves.easeIn,
+    this.fadeOutDuration = const Duration(milliseconds: 1000),
+    this.fadeOutCurve = Curves.easeOut,
+    this.fadeInDuration = const Duration(milliseconds: 500),
+    this.fadeInCurve = Curves.easeIn,
     this.width,
     this.height,
     this.fit,
-    this.alignment: Alignment.center,
-    this.repeat: ImageRepeat.noRepeat,
-    this.matchTextDirection: false,
+    this.alignment = Alignment.center,
+    this.repeat = ImageRepeat.noRepeat,
+    this.matchTextDirection = false,
     this.httpHeaders,
-    CacheManager cacheManager,
-    this.useOldImageOnUrlChange: false,
+    this.cacheManager,
+    this.useOldImageOnUrlChange = false,
     this.color,
-    this.filterQuality: FilterQuality.low,
+    this.filterQuality = FilterQuality.low,
     this.colorBlendMode,
     this.placeholderFadeInDuration,
   })  : assert(imageUrl != null),
@@ -166,7 +165,7 @@ class CachedNetworkImage extends StatefulWidget {
         assert(filterQuality != null),
         assert(repeat != null),
         assert(matchTextDirection != null),
-        this.cacheManager = cacheManager ?? DefaultCacheManager(),
+        assert(cacheManager != null),
         super(key: key);
 
   @override
@@ -186,7 +185,7 @@ class _ImageTransitionHolder {
     this.image,
     @required this.animationController,
     this.error,
-    this.curve: Curves.easeIn,
+    this.curve = Curves.easeIn,
   }) : forwardTickerFuture = animationController.forward();
 
   dispose() {
@@ -231,7 +230,7 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
   }
 
   void _addImage({CachedImage image, Object error, Duration duration}) {
-    if (_imageHolders.length > 0) {
+    if (_imageHolders.isNotEmpty) {
       var lastHolder = _imageHolders.last;
       lastHolder.forwardTickerFuture.then((_) {
         if (lastHolder.animationController == null) {
@@ -279,19 +278,19 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
       builder: (BuildContext context, AsyncSnapshot<CachedImage> snapshot) {
         if (snapshot.hasError) {
           // error
-          if (_imageHolders.length == 0 || _imageHolders.last.error == null) {
+          if (_imageHolders.isEmpty || _imageHolders.last.error == null) {
             _addImage(image: null, error: snapshot.error);
           }
         } else {
           var fileInfo = snapshot.data;
           if (fileInfo == null) {
             // placeholder
-            if (_imageHolders.length == 0 || _imageHolders.last.image != null) {
+            if (_imageHolders.isEmpty || _imageHolders.last.image != null) {
               _addImage(image: null, duration: widget.placeholderFadeInDuration ?? Duration.zero);
             }
-          } else if (_imageHolders.length == 0 ||
+          } else if (_imageHolders.isEmpty ||
               _imageHolders.last.image?.originalUrl != fileInfo.originalUrl) {
-            _addImage(image: fileInfo, duration: _imageHolders.length > 0 ? null : Duration.zero);
+            _addImage(image: fileInfo, duration: _imageHolders.isNotEmpty ? null : Duration.zero);
           }
         }
 

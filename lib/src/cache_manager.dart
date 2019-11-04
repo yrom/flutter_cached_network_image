@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart' as p;
+import 'package:pedantic/pedantic.dart';
 import 'package:quiver/collection.dart';
 
 part 'file_fetcher.dart';
@@ -59,7 +60,7 @@ class DiskCacheManager extends CacheManager {
       } else {
         try {
           final remote = await fetcher.download(url, headers: headers);
-          if (remote.length > 0) {
+          if (remote.isNotEmpty) {
             final entity = _updateCache(key, remote);
             if (controller.hasListener) {
               controller.add(entity);
@@ -73,7 +74,12 @@ class DiskCacheManager extends CacheManager {
           } else {
             FlutterError.reportError(FlutterErrorDetails(
                 exception: e,
-                stack: stack,
+                stack: StackTrace.fromString(stack
+                    .toString()
+                    .trimRight()
+                    .split('\n')
+                    .skipWhile((line) => !line.contains("package:cached_network_image"))
+                    .join('\n')),
                 silent: true,
                 library: 'cache manager library',
                 context: ErrorDescription('while loading image'),
@@ -81,7 +87,7 @@ class DiskCacheManager extends CacheManager {
           }
         }
       }
-      controller.close();
+      await controller.close();
     };
 
     return controller.stream.map<CachedImage>((cache) => CachedImage(url, cache));
@@ -129,16 +135,17 @@ class DiskCacheStore {
   static const _statsInterval = Duration(minutes: 5);
   final memCache = LruMap<String, BinaryResource>(maximumSize: 24);
   final _pending = Map<String, Completer<BinaryResource>>();
-  final Future<String> basePath;
+  final Future<Directory> baseDir;
   final DiskCacheStats stats = DiskCacheStats();
 
   final int _cacheSizeLimit;
 
   final Duration _maxAge;
 
-  DiskCacheStore(this.basePath,
+  DiskCacheStore(Future<String> basePath,
       {int cacheSizeLimit = _defaultCacheSize, Duration maxAge = _defaultMaxAge})
       : assert(basePath != null),
+        baseDir = basePath.then((v) => Directory(path.join(v, _dirname))),
         this._cacheSizeLimit = cacheSizeLimit ?? _minCacheSize,
         this._maxAge = maxAge ?? _defaultMaxAge {
     _maybeUpdateCachedSize();
@@ -176,18 +183,16 @@ class DiskCacheStore {
     if (stats.isInitialized) {
       stats.increment(resource.length, 1);
     } else if (_updatingFuture != null) {
-      _updatingFuture.then((_) {
-        stats.increment(resource.length, 1);
-      });
+      unawaited(_updatingFuture.then((_) => stats.increment(resource.length, 1)));
     }
     File file = File(await getSavePath(key));
-    Directory dir = file.parent;
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    final bytes = resource.readAsBytesSync();
-    assert(bytes != null);
     try {
+      Directory dir = file.parent;
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final bytes = resource.readAsBytesSync();
+      assert(bytes != null);
       await file.writeAsBytes(bytes, flush: true);
       // rewrite memCache after saving
       memCache[key] = BinaryResource.file(key, file);
@@ -231,18 +236,14 @@ class DiskCacheStore {
   String cacheKeyFromFile(File file) => path.basenameWithoutExtension(file.path);
 
   Future<String> getSubdirs(String key) async {
-    String folder = await basePath;
+    Directory folder = await baseDir;
 
     int bucekt = key.hashCode.toUnsigned(8) % _buckets;
-    return path.join(folder, _dirname, bucekt.toString());
-  }
-
-  Future<String> getSubdir() async {
-    return path.join(await basePath, _dirname);
+    return path.join(folder.path, bucekt.toString());
   }
 
   Future<List<BinaryResource>> getAllEntities() async {
-    var files = await listFiles(Directory(await getSubdir()));
+    var files = await listFiles(await baseDir);
     if (files.isEmpty) return const [];
     return files
         .where((f) => path.extension(f.path) == _ext)
@@ -273,7 +274,7 @@ class DiskCacheStore {
   }
 
   Future _updateFileCacheSize() async {
-    var files = await listFilesAndMap(Directory(await getSubdir()), (f) => f.length());
+    var files = await listFilesAndMap(await baseDir, (f) => f.length());
     var count = files.length;
     var size = count == 0 ? 0 : files.map((e) => e.value).reduce((a, b) => a + b);
     if (stats.size != size || stats.count != count) {
@@ -310,11 +311,12 @@ class DiskCacheStore {
     return _purge(bySize: true, byTime: false);
   }
 
+  // ignore: unused_element
   Future _trimExpiredEntries() {
     return _purge(bySize: false, byTime: true);
   }
 
-  Future _purge({bySize: true, byTime: false}) async {
+  Future _purge({bySize = true, byTime = false}) async {
     List<MapEntry<File, DateTime>> sortedList = await _getSortedEntries();
     if (sortedList.isEmpty) return;
     int freeSize = -1;
@@ -361,7 +363,7 @@ class DiskCacheStore {
   }
 
   Future<List<MapEntry<File, DateTime>>> _getSortedEntries() async {
-    var files = await listFilesAndMap(Directory(await getSubdir()), (f) => f.lastModified());
+    var files = await listFilesAndMap(await baseDir, (f) => f.lastModified());
     if (files.isEmpty) return const [];
     var futureTime = DateTime.now().add(const Duration(hours: 2));
     var sortedList = <MapEntry<File, DateTime>>[];
@@ -475,10 +477,10 @@ Future<List<File>> listFiles(Directory dir) {
   return dir.exists().then((exists) {
     if (exists) {
       return dir
-        .list(recursive: true, followLinks: false)
-        .where((entity) => entity is File)
-        .cast<File>()
-        .toList();
+          .list(recursive: true, followLinks: false)
+          .where((entity) => entity is File)
+          .cast<File>()
+          .toList();
     }
     return const <File>[];
   });
@@ -487,11 +489,12 @@ Future<List<File>> listFiles(Directory dir) {
 Future<List<MapEntry<File, E>>> listFilesAndMap<E>(Directory dir, FutureOr<E> map(File file)) {
   return dir.exists().then((exists) {
     if (exists) {
-      return dir.list(recursive: true, followLinks: false)
-        .where((entity) => entity is File)
-        .cast<File>()
-        .asyncMap((file) async => MapEntry(file, await map(file)))
-        .toList();
+      return dir
+          .list(recursive: true, followLinks: false)
+          .where((entity) => entity is File)
+          .cast<File>()
+          .asyncMap((file) async => MapEntry(file, await map(file)))
+          .toList();
     }
     return const [];
   });
