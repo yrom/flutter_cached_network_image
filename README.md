@@ -1,26 +1,22 @@
-**Breaking change with ImageProvider.load in Flutter 1.10**
-
-The Flutter team made a breaking change with the ImageProvider in Flutter 1.10.15 (currently Master channel only).
-
-If you are experiencing one of the following errors upgrade to [2.0.0-rc](https://pub.dev/packages/cached_network_image/versions/2.0.0-rc).
-
-```
-The method 'ScaledFileImage.load' has fewer positional arguments than those of overridden method 'ImageProvider.load'
-```
-```
-The method 'CachedNetworkImageProvider.load' has fewer positional arguments than those of overridden method 'ImageProvider.load'
-```
-
-
 # Cached network image
-Widget now uses builders for the placeholder and error widget and uses sqflite for cache management. See the [docs](https://pub.dartlang.org/documentation/cached_network_image/latest/cached_network_image/cached_network_image-library.html) for more information.
-
-[![pub package](https://img.shields.io/pub/v/cached_network_image.svg)](https://pub.dartlang.org/packages/cached_network_image)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.me/renefloor)
-
 A flutter library to show images from the internet and keep them in the cache directory.
 
+## Notice
+
+This repo was forked from [renefloor/flutter_cached_network_image](https://github.com/renefloor/flutter_cached_network_image).
+
 ## How to use
+
+Add dependency in pubspec:
+
+```yaml
+dependencies:
+  cached_network_image:
+    git: 
+      url: https://github.com/yrom/flutter_cached_network_image.git
+      ref: feature/lru-disk-cache-store
+```
+
 The CachedNetworkImage can be used directly or through the ImageProvider.
 
 ```dart
@@ -54,5 +50,19 @@ CachedNetworkImage(
 ),
 ```
 
-## How it works
-The cached network images stores and retrieves files using the [flutter_cache_manager](https://pub.dartlang.org/packages/flutter_cache_manager). 
+And you can define `CacheManager` on your own :
+
+```dart
+
+CacheManager defaultCacheManager = DefaultCacheManager(_getImagePath());
+Future<String> _getImagePath() async {
+  Directory dir = await getTemporaryDirectory();
+  return p.join(dir.path, 'example');
+}
+
+CachedNetworkImage(
+  placeholder: (context, url) => CircularProgressIndicator(),
+  imageUrl: 'http://via.placeholder.com/200x150',
+  cacheManager: defaultCacheManager,
+)
+```
