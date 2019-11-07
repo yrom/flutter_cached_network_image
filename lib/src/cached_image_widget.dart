@@ -273,8 +273,7 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
       stream: widget.cacheManager
           .getImage(widget.imageUrl, headers: widget.httpHeaders)
           // ignore errors if not mounted
-          .handleError(() {}, test: (_) => !mounted)
-          .where((f) => f?.originalUrl != fromMemory?.originalUrl),
+          .handleError(() {}, test: (_) => !mounted),
       builder: (BuildContext context, AsyncSnapshot<CachedImage> snapshot) {
         if (snapshot.hasError) {
           // error
