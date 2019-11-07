@@ -40,6 +40,15 @@ abstract class BinaryResource {
 
   /// bytes length
   int get length;
+
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! BinaryResource) return false;
+    final BinaryResource typedOther = other;
+    return id == typedOther.id;
+  }
 }
 
 class CachedImage {
@@ -47,6 +56,11 @@ class CachedImage {
   final BinaryResource resource;
 
   CachedImage(this.originalUrl, this.resource);
+
+  @override
+  String toString() {
+    return 'CachedImage{$originalUrl}';
+  }
 }
 
 class ByteDataResource implements BinaryResource {
@@ -76,20 +90,8 @@ class ByteDataResource implements BinaryResource {
   int get hashCode => getCrc32(readAsBytesSync());
 
   @override
-  bool operator ==(Object other) {
-    if (other.runtimeType != runtimeType) return false;
-    final ByteDataResource typedOther = other;
-    if (data == typedOther.data || id == typedOther.id) return true;
-    if (data.lengthInBytes == typedOther.data.lengthInBytes &&
-        data.offsetInBytes == typedOther.data.offsetInBytes) {
-      return hashCode == typedOther.hashCode;
-    }
-    return false;
-  }
-
-  @override
   String toString() {
-    return "bytebuff:$data";
+    return "ByteDataResource {$id, bytebuff:$data}";
   }
 }
 
@@ -114,20 +116,19 @@ class FileResource implements BinaryResource {
   }
 
   @override
-  int get length => file.lengthSync();
+  int get length {
+    try {
+      return file.lengthSync();
+    } catch (_) {
+      return 0;
+    }
+  }
 
   @override
   int get hashCode => file.hashCode;
 
   @override
-  bool operator ==(Object other) {
-    if (other.runtimeType != runtimeType) return false;
-    final FileResource typedOther = other;
-    return id == typedOther.id || file.path == typedOther.file.path;
-  }
-
-  @override
   String toString() {
-    return "file:${file.path}";
+    return "FileResource {$id, file:${file.path}}";
   }
 }
