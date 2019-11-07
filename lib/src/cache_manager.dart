@@ -18,6 +18,8 @@ part 'file_fetcher.dart';
 /// See [CacheEntity.key].
 typedef String CacheKeyGenerator(String url);
 
+typedef Future<void> BinaryResourcePersistence(File file, BinaryResource resource);
+
 String _defaultCacheKeyGenerator(String url) {
   return sha1.convert(url.codeUnits).toString();
 }
@@ -26,9 +28,19 @@ Future<FileFetcherResponse> _defaultFileFetcher(String url, {Map<String, String>
   return http.get(url, headers: headers).then((v) => HttpFileFetcherResponse(v));
 }
 
+Future<void> _defaultBinaryResourcePersistence(File file, BinaryResource resource) async {
+  Directory dir = file.parent;
+  if (!await dir.exists()) {
+    await dir.create(recursive: true);
+  }
+  final bytes = resource.readAsBytesSync();
+  assert(bytes != null);
+  await file.writeAsBytes(bytes, flush: true);
+}
+
 class DiskCacheManager extends CacheManager {
   final DiskCacheStore store;
-  final RemoteResourceDownloader fetcher;
+  final RemoteResourceDownloader downloader;
   final CacheKeyGenerator keyGenerator;
 
   DiskCacheManager(
@@ -38,13 +50,18 @@ class DiskCacheManager extends CacheManager {
   })  : assert(store != null),
         assert(fileFetcher != null),
         assert(keyGenerator != null),
-        this.fetcher = RemoteResourceDownloader(fileFetcher);
+        this.downloader = RemoteResourceDownloader(store, fileFetcher);
 
   @override
   Stream<CachedImage> getImage(String url, {Map<String, String> headers}) {
     final controller = StreamController<BinaryResource>();
 
     controller.onListen = () async {
+      if (url == null || url.isEmpty) {
+        controller.addError(ArgumentError("Invalid url!"));
+        await controller.close();
+        return;
+      }
       final key = _keyOf(url);
 
       BinaryResource cache;
@@ -59,11 +76,10 @@ class DiskCacheManager extends CacheManager {
         if (controller.hasListener) controller.add(cache);
       } else {
         try {
-          final remote = await fetcher.download(url, headers: headers);
-          if (remote.isNotEmpty) {
-            final entity = _updateCache(key, remote);
+          final remote = await downloader.download(key, url, headers: headers);
+          if (remote.length > 0) {
             if (controller.hasListener) {
-              controller.add(entity);
+              controller.add(remote);
             }
           } else {
             throw Exception("Invalid length of resource: $remote");
@@ -96,7 +112,7 @@ class DiskCacheManager extends CacheManager {
   @override
   CachedImage getImageFromMemory(String imageUrl) {
     final key = _keyOf(imageUrl);
-    final fromMemory = store.memCache.containsKey(key) ? store.memCache[key] : null;
+    final fromMemory = store.getFromMemory(key);
     if (fromMemory != null) return CachedImage(imageUrl, fromMemory);
     return null;
   }
@@ -110,12 +126,6 @@ class DiskCacheManager extends CacheManager {
       cancelOnError: true,
     );
     return completer.future;
-  }
-
-  BinaryResource _updateCache(String key, Uint8List body) {
-    final resource = BinaryResource.memory(key, body.buffer.asByteData());
-    store.put(resource);
-    return resource;
   }
 
   final _keyCache = LruMap<String, String>();
@@ -141,14 +151,29 @@ class DiskCacheStore {
   final int _cacheSizeLimit;
 
   final Duration _maxAge;
+  final BinaryResourcePersistence _persistence;
 
-  DiskCacheStore(Future<String> basePath,
-      {int cacheSizeLimit = _defaultCacheSize, Duration maxAge = _defaultMaxAge})
-      : assert(basePath != null),
+  DiskCacheStore(
+    Future<String> basePath, {
+    int cacheSizeLimit = _defaultCacheSize,
+    Duration maxAge = _defaultMaxAge,
+    BinaryResourcePersistence persistence = _defaultBinaryResourcePersistence,
+  })  : assert(basePath != null),
+        assert(persistence != null),
         baseDir = basePath.then((v) => Directory(path.join(v, _dirname))),
-        this._cacheSizeLimit = cacheSizeLimit ?? _minCacheSize,
-        this._maxAge = maxAge ?? _defaultMaxAge {
+        _persistence = persistence,
+        _cacheSizeLimit = cacheSizeLimit ?? _minCacheSize,
+        _maxAge = maxAge ?? _defaultMaxAge {
     _maybeUpdateCachedSize();
+  }
+
+  BinaryResource getFromMemory(String key) {
+    var resource = memCache[key];
+    if (resource is FileResource && resource.file.existsSync()) {
+      return resource;
+    }
+    memCache.remove(key);
+    return null;
   }
 
   Future<BinaryResource> get(String key) {
@@ -175,8 +200,12 @@ class DiskCacheStore {
   }
 
   Future<void> put(BinaryResource resource) {
-    memCache[resource.id] = resource;
-    return _writeCache(resource.id, resource);
+    if (memCache[resource.id] == null) {
+      // avoid redundant writing
+      memCache[resource.id] = resource;
+      return _writeCache(resource.id, resource);
+    }
+    return Future.value();
   }
 
   Future<void> _writeCache(String key, BinaryResource resource) async {
@@ -187,16 +216,16 @@ class DiskCacheStore {
     }
     File file = File(await getSavePath(key));
     try {
-      Directory dir = file.parent;
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
+      if (resource.length <= 0) {
+        // remove file if invalid
+        await file.delete();
+        memCache.remove(key);
+      } else {
+        await _persistence(file, resource);
+        // rewrite memCache after saving
+        memCache[key] = BinaryResource.file(key, file);
+        _maybeEvictFilesOverSize();
       }
-      final bytes = resource.readAsBytesSync();
-      assert(bytes != null);
-      await file.writeAsBytes(bytes, flush: true);
-      // rewrite memCache after saving
-      memCache[key] = BinaryResource.file(key, file);
-      _maybeEvictFilesOverSize();
     } on FileSystemException catch (e, stack) {
       FlutterError.reportError(FlutterErrorDetails(
         exception: e,
@@ -420,33 +449,37 @@ class DiskCacheStats {
 class RemoteResourceDownloader {
   final FileFetcher fetcher;
 
-  final Map<String, Completer<Uint8List>> _mem = Map();
+  final Map<String, Completer<BinaryResource>> _mem = Map();
 
-  RemoteResourceDownloader(this.fetcher);
+  final DiskCacheStore store;
 
-  Future<Uint8List> download(String url, {Map<String, String> headers}) {
+  RemoteResourceDownloader(this.store, this.fetcher);
+
+  Future<BinaryResource> download(String key, String url, {Map<String, String> headers}) {
     if (_mem.containsKey(url)) {
       return _mem[url].future;
     }
 
-    var completer = Completer<Uint8List>.sync();
+    var completer = Completer<BinaryResource>.sync();
     _mem[url] = completer;
 
     fetcher(url, headers: headers)
-        .then((response) => _handleResponse(url, response))
-        .then((resource) => completer.complete(resource))
+        .then((response) => _handleResponse(key, url, response))
+        .then(completer.complete)
         .catchError(completer.completeError)
         .whenComplete(() => _mem.remove(url));
     return completer.future;
   }
 
-  Uint8List _handleResponse(String url, FileFetcherResponse response) {
+  BinaryResource _handleResponse(String key, String url, FileFetcherResponse response) {
     if (response.statusCode == 200) {
       Uint8List body = response.bodyBytes;
       if (body == null) {
         throw HttpException("Null body!", uri: Uri.parse(url));
       }
-      return body;
+      var resource = BinaryResource.memory(key, body.buffer.asByteData());
+      store.put(resource);
+      return resource;
     }
     throw HttpException("Invalid status: ${response.statusCode}", uri: Uri.parse(url));
   }
@@ -478,6 +511,7 @@ Future<List<File>> listFiles(Directory dir) {
     if (exists) {
       return dir
           .list(recursive: true, followLinks: false)
+          .handleError(() {}, test: (e) => e is FileSystemException)
           .where((entity) => entity is File)
           .cast<File>()
           .toList();
@@ -491,6 +525,7 @@ Future<List<MapEntry<File, E>>> listFilesAndMap<E>(Directory dir, FutureOr<E> ma
     if (exists) {
       return dir
           .list(recursive: true, followLinks: false)
+          .handleError(() {}, test: (e) => e is FileSystemException)
           .where((entity) => entity is File)
           .cast<File>()
           .asyncMap((file) async => MapEntry(file, await map(file)))
