@@ -94,7 +94,10 @@ class DiskCacheManager extends CacheManager {
                     .toString()
                     .trimRight()
                     .split('\n')
+                    .reversed
                     .skipWhile((line) => !line.contains("package:cached_network_image"))
+                    .toList(growable: false)
+                    .reversed
                     .join('\n')),
                 silent: true,
                 library: 'cache manager library',
