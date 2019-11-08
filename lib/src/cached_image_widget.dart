@@ -312,7 +312,12 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
             if (widget.height != null && widget.height.isFinite) {
               targetHeight = (widget.height * window.devicePixelRatio).round();
             }
-
+            // fix https://github.com/renefloor/flutter_cached_network_image/issues/275
+            bool needScale = widget.fit == BoxFit.fill || widget.fit == BoxFit.scaleDown;
+            if (!needScale) {
+              if (targetWidth != null) targetHeight = null;
+              if (targetHeight != null) targetWidth = null;
+            }
             children.add(_transitionWidget(
                 holder: holder,
                 child: _image(
