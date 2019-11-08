@@ -221,7 +221,7 @@ class DiskCacheStore {
     try {
       if (resource.length <= 0) {
         // remove file if invalid
-        await file.delete();
+        if (file.existsSync()) await file.delete();
         memCache.remove(key);
       } else {
         await _persistence(file, resource);
