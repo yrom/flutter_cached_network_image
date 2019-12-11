@@ -44,9 +44,11 @@ class ScaledImage extends ImageProvider<_ScaledImageKey> {
   }
 
   @override
-  ImageStreamCompleter load(_ScaledImageKey key) {
+  ImageStreamCompleter load(_ScaledImageKey key,
+      [Future<Codec> decode(Uint8List bytes,
+          {int cacheWidth, int cacheHeight})]) {
     return MultiFrameImageStreamCompleter(
-      codec: _loadAsync(key),
+      codec: _loadAsync(key, decode),
       scale: key.scale,
       informationCollector: () sync* {
         yield ErrorDescription('BinaryResource: ${resource.toString()}');
@@ -54,14 +56,17 @@ class ScaledImage extends ImageProvider<_ScaledImageKey> {
     );
   }
 
-  Future<Codec> _loadAsync(_ScaledImageKey key) async {
+  Future<Codec> _loadAsync(_ScaledImageKey key, Function decode) async {
     assert(key.resourceId == this.resource.id);
 
     final Uint8List bytes = await this.resource.readAsBytes();
     if (bytes.lengthInBytes == 0) {
       throw Exception("Can not instantiate image codec for zero length bytes");
     }
-    return await instantiateImageCodec(bytes,
+    if (decode != null) {
+      return decode(bytes, cacheWidth: targetWidth, cacheHeight: targetHeight);
+    }
+    return instantiateImageCodec(bytes,
         targetWidth: targetWidth, targetHeight: targetHeight);
   }
 

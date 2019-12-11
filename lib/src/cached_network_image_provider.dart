@@ -51,9 +51,11 @@ class CachedNetworkImageProvider
   }
 
   @override
-  ImageStreamCompleter load(CachedNetworkImageProvider key) {
+  ImageStreamCompleter load(CachedNetworkImageProvider key,
+      [Future<ui.Codec> decode(Uint8List bytes,
+          {int cacheWidth, int cacheHeight})]) {
     return MultiFrameImageStreamCompleter(
-      codec: _loadAsync(key),
+      codec: _loadAsync(key, decode),
       scale: key.scale,
       informationCollector: () => [
         DiagnosticsProperty<ImageProvider>('Image provider', this),
@@ -62,18 +64,24 @@ class CachedNetworkImageProvider
     );
   }
 
-  Future<ui.Codec> _loadAsync(CachedNetworkImageProvider key) async {
+  Future<ui.Codec> _loadAsync(
+      CachedNetworkImageProvider key,
+      Future<ui.Codec> decode(Uint8List bytes,
+          {int cacheWidth, int cacheHeight})) async {
     var mngr = cacheManager ?? DefaultCacheManager();
     var resource = await mngr.getImageResource(url, headers: headers);
     if (resource == null) {
       if (errorListener != null) errorListener();
       return Future<ui.Codec>.error("Couldn't download or retrieve file.");
     }
-    return await _loadAsyncFromResource(key, resource);
+    return _loadAsyncFromResource(key, resource, decode);
   }
 
   Future<ui.Codec> _loadAsyncFromResource(
-      CachedNetworkImageProvider key, BinaryResource resource) async {
+      CachedNetworkImageProvider key,
+      BinaryResource resource,
+      Future<ui.Codec> decode(Uint8List bytes,
+          {int cacheWidth, int cacheHeight})) async {
     assert(key == this);
 
     final Uint8List bytes = await resource.readAsBytes();
@@ -82,9 +90,12 @@ class CachedNetworkImageProvider
       if (errorListener != null) errorListener();
       throw Exception("BinaryResource was empty");
     }
-
-    return await ui.instantiateImageCodec(bytes,
-        targetWidth: targetWidth, targetHeight: targetHeight);
+    if (decode != null) {
+      return decode(bytes, cacheWidth: targetWidth, cacheHeight: targetHeight);
+    } else {
+      return ui.instantiateImageCodec(bytes,
+          targetWidth: targetWidth, targetHeight: targetHeight);
+    }
   }
 
   @override
