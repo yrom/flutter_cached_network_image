@@ -1,4 +1,5 @@
 part of 'cache_manager.dart';
+
 typedef Future<FileFetcherResponse> FileFetcher(String url,
     {Map<String, String> headers});
 

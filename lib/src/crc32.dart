@@ -43,7 +43,7 @@ class Crc32 extends crypto.Hash {
   Crc32 newInstance() => Crc32();
 
   ByteConversionSink startChunkedConversion(Sink<crypto.Digest> sink) =>
-    _Crc32Sink(sink);
+      _Crc32Sink(sink);
 
   void add(List<int> data) {
     _hash = getCrc32(data, _hash);

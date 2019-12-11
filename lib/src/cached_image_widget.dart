@@ -7,9 +7,11 @@ import 'package:flutter/widgets.dart';
 
 import 'cached_image_manager.dart';
 
-typedef Widget ImageWidgetBuilder(BuildContext context, ImageProvider imageProvider);
+typedef Widget ImageWidgetBuilder(
+    BuildContext context, ImageProvider imageProvider);
 typedef Widget PlaceholderWidgetBuilder(BuildContext context, String url);
-typedef Widget LoadingErrorWidgetBuilder(BuildContext context, String url, Object error);
+typedef Widget LoadingErrorWidgetBuilder(
+    BuildContext context, String url, Object error);
 
 class CachedNetworkImage extends StatefulWidget {
   /// Option to use cachemanager with other settings
@@ -133,31 +135,33 @@ class CachedNetworkImage extends StatefulWidget {
   /// If not given a value, defaults to FilterQuality.low.
   final FilterQuality filterQuality;
 
-  CachedNetworkImage({
-    Key key,
-    @required this.imageUrl,
-    this.imageBuilder,
-    this.placeholder,
-    this.errorWidget,
-    this.fadeOutDuration = const Duration(milliseconds: 1000),
-    this.fadeOutCurve = Curves.easeOut,
-    this.fadeInDuration = const Duration(milliseconds: 500),
-    this.fadeInCurve = Curves.easeIn,
-    this.width,
-    this.height,
-    this.fit,
-    this.alignment = Alignment.center,
-    this.repeat = ImageRepeat.noRepeat,
-    this.matchTextDirection = false,
-    this.httpHeaders,
-    this.cacheManager,
-    this.useOldImageOnUrlChange = false,
-    this.color,
-    this.filterQuality = FilterQuality.low,
-    this.colorBlendMode,
-    this.placeholderFadeInDuration,
-  })  : assert(imageUrl != null),
-        assert(fadeOutDuration != null),
+  final bool gaplessPlayback;
+
+  CachedNetworkImage(
+      {Key key,
+      @required this.imageUrl,
+      this.imageBuilder,
+      this.placeholder,
+      this.errorWidget,
+      this.fadeOutDuration = const Duration(milliseconds: 1000),
+      this.fadeOutCurve = Curves.easeOut,
+      this.fadeInDuration = const Duration(milliseconds: 500),
+      this.fadeInCurve = Curves.easeIn,
+      this.width,
+      this.height,
+      this.fit,
+      this.alignment = Alignment.center,
+      this.repeat = ImageRepeat.noRepeat,
+      this.matchTextDirection = false,
+      this.httpHeaders,
+      this.cacheManager,
+      this.useOldImageOnUrlChange = false,
+      this.color,
+      this.filterQuality = FilterQuality.low,
+      this.colorBlendMode,
+      this.placeholderFadeInDuration,
+      this.gaplessPlayback = false})
+      : assert(fadeOutDuration != null),
         assert(fadeOutCurve != null),
         assert(fadeInDuration != null),
         assert(fadeInCurve != null),
@@ -196,7 +200,8 @@ class _ImageTransitionHolder {
   }
 }
 
-class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProviderStateMixin {
+class CachedNetworkImageState extends State<CachedNetworkImage>
+    with TickerProviderStateMixin {
   List<_ImageTransitionHolder> _imageHolders = List();
   Key _streamBuilderKey = UniqueKey();
 
@@ -259,13 +264,17 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
         error: error,
         animationController: AnimationController(
           vsync: this,
-          duration: duration ?? (widget.fadeInDuration ?? Duration(milliseconds: 500)),
+          duration: duration ??
+              (widget.fadeInDuration ?? Duration(milliseconds: 500)),
         ),
       ),
     );
   }
 
   Widget _animatedWidget() {
+    if (widget.imageUrl == null) {
+      return _errorWidget(context, "Image Url is NULL");
+    }
     var fromMemory = widget.cacheManager.getImageFromMemory(widget.imageUrl);
     return StreamBuilder<CachedImage>(
       key: _streamBuilderKey,
@@ -285,11 +294,15 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
           if (fileInfo == null) {
             // placeholder
             if (_imageHolders.isEmpty || _imageHolders.last.image != null) {
-              _addImage(image: null, duration: widget.placeholderFadeInDuration ?? Duration.zero);
+              _addImage(
+                  image: null,
+                  duration: widget.placeholderFadeInDuration ?? Duration.zero);
             }
           } else if (_imageHolders.isEmpty ||
               _imageHolders.last.image?.originalUrl != fileInfo.originalUrl) {
-            _addImage(image: fileInfo, duration: _imageHolders.isNotEmpty ? null : Duration.zero);
+            _addImage(
+                image: fileInfo,
+                duration: _imageHolders.isNotEmpty ? null : Duration.zero);
           }
         }
 
@@ -297,7 +310,8 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
         for (var holder in _imageHolders) {
           if (holder.error != null) {
             children.add(
-              _transitionWidget(holder: holder, child: _errorWidget(context, holder.error)),
+              _transitionWidget(
+                  holder: holder, child: _errorWidget(context, holder.error)),
             );
           } else if (holder.image == null) {
             children.add(
@@ -313,7 +327,8 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
               targetHeight = (widget.height * window.devicePixelRatio).round();
             }
             // fix https://github.com/renefloor/flutter_cached_network_image/issues/275
-            bool needScale = widget.fit == BoxFit.fill || widget.fit == BoxFit.scaleDown;
+            bool needScale =
+                widget.fit == BoxFit.fill || widget.fit == BoxFit.scaleDown;
             if (!needScale) {
               if (targetWidth != null) targetHeight = null;
               if (targetHeight != null) targetWidth = null;
@@ -339,7 +354,8 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
 
   Widget _transitionWidget({_ImageTransitionHolder holder, Widget child}) {
     return FadeTransition(
-      opacity: CurvedAnimation(curve: holder.curve, parent: holder.animationController),
+      opacity: CurvedAnimation(
+          curve: holder.curve, parent: holder.animationController),
       child: child,
     );
   }
@@ -358,6 +374,7 @@ class CachedNetworkImageState extends State<CachedNetworkImage> with TickerProvi
             colorBlendMode: widget.colorBlendMode,
             matchTextDirection: widget.matchTextDirection,
             filterQuality: widget.filterQuality,
+            gaplessPlayback: widget.gaplessPlayback,
           );
   }
 

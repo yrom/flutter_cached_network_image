@@ -14,7 +14,8 @@ class ScaledImage extends ImageProvider<_ScaledImageKey> {
   /// Creates an object that decodes a [File] as an image.
   ///
   /// The arguments must not be null.
-  const ScaledImage(this.resource, {this.scale = 1.0, this.targetHeight, this.targetWidth})
+  const ScaledImage(this.resource,
+      {this.scale = 1.0, this.targetHeight, this.targetWidth})
       : assert(resource != null),
         assert(scale != null);
 
@@ -60,7 +61,8 @@ class ScaledImage extends ImageProvider<_ScaledImageKey> {
     if (bytes.lengthInBytes == 0) {
       throw Exception("Can not instantiate image codec for zero length bytes");
     }
-    return await instantiateImageCodec(bytes, targetWidth: targetWidth, targetHeight: targetHeight);
+    return await instantiateImageCodec(bytes,
+        targetWidth: targetWidth, targetHeight: targetHeight);
   }
 
   @override
@@ -93,7 +95,6 @@ class _ScaledImageKey {
     this.targetWidth,
     this.targetHeight,
   });
-
 
   @override
   String toString() {

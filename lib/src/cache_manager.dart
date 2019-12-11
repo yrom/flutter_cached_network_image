@@ -18,17 +18,22 @@ part 'file_fetcher.dart';
 /// See [CacheEntity.key].
 typedef String CacheKeyGenerator(String url);
 
-typedef Future<void> BinaryResourcePersistence(File file, BinaryResource resource);
+typedef Future<void> BinaryResourcePersistence(
+    File file, BinaryResource resource);
 
 String _defaultCacheKeyGenerator(String url) {
-  return sha1.convert(url.codeUnits).toString();
+  return url.isEmpty ? '' : sha1.convert(url.codeUnits).toString();
 }
 
-Future<FileFetcherResponse> _defaultFileFetcher(String url, {Map<String, String> headers}) {
-  return http.get(url, headers: headers).then((v) => HttpFileFetcherResponse(v));
+Future<FileFetcherResponse> _defaultFileFetcher(String url,
+    {Map<String, String> headers}) {
+  return http
+      .get(url, headers: headers)
+      .then((v) => HttpFileFetcherResponse(v));
 }
 
-Future<void> _defaultBinaryResourcePersistence(File file, BinaryResource resource) async {
+Future<void> _defaultBinaryResourcePersistence(
+    File file, BinaryResource resource) async {
   Directory dir = file.parent;
   if (!await dir.exists()) {
     await dir.create(recursive: true);
@@ -95,21 +100,24 @@ class DiskCacheManager extends CacheManager {
                     .trimRight()
                     .split('\n')
                     .reversed
-                    .skipWhile((line) => !line.contains("package:cached_network_image"))
+                    .skipWhile((line) =>
+                        !line.contains("package:cached_network_image"))
                     .toList(growable: false)
                     .reversed
                     .join('\n')),
                 silent: true,
                 library: 'cache manager library',
                 context: ErrorDescription('while loading image'),
-                informationCollector: () => [StringProperty("Image url", url)]));
+                informationCollector: () =>
+                    [StringProperty("Image url", url)]));
           }
         }
       }
       await controller.close();
     };
 
-    return controller.stream.map<CachedImage>((cache) => CachedImage(url, cache));
+    return controller.stream
+        .map<CachedImage>((cache) => CachedImage(url, cache));
   }
 
   @override
@@ -121,7 +129,8 @@ class DiskCacheManager extends CacheManager {
   }
 
   @override
-  Future<BinaryResource> getImageResource(String url, {Map<String, String> headers}) {
+  Future<BinaryResource> getImageResource(String url,
+      {Map<String, String> headers}) {
     final completer = Completer<BinaryResource>.sync();
     getImage(url, headers: headers).listen(
       (image) => completer.complete(image.resource),
@@ -144,7 +153,7 @@ class DiskCacheStore {
   static const _dirname = "fimg.v1";
   static const _defaultCacheSize = 100 * 1024 * 1024;
   static const _minCacheSize = 5 * 1024 * 1024;
-  static const _defaultMaxAge = Duration(days: 7);
+  static const _defaultMaxAge = Duration(days: 5);
   static const _statsInterval = Duration(minutes: 5);
   final memCache = LruMap<String, BinaryResource>(maximumSize: 24);
   final _pending = Map<String, Completer<BinaryResource>>();
@@ -215,13 +224,18 @@ class DiskCacheStore {
     if (stats.isInitialized) {
       stats.increment(resource.length, 1);
     } else if (_updatingFuture != null) {
-      unawaited(_updatingFuture.then((_) => stats.increment(resource.length, 1)));
+      unawaited(
+          _updatingFuture.then((_) => stats.increment(resource.length, 1)));
     }
     File file = File(await getSavePath(key));
     try {
       if (resource.length <= 0) {
         // remove file if invalid
-        if (file.existsSync()) await file.delete();
+        try {
+          if (file.existsSync()) await file.delete();
+        } on FileSystemException catch (_) {
+          // ignored
+        }
         memCache.remove(key);
       } else {
         await _persistence(file, resource);
@@ -230,23 +244,26 @@ class DiskCacheStore {
         _maybeEvictFilesOverSize();
       }
     } on FileSystemException catch (e, stack) {
-      FlutterError.reportError(FlutterErrorDetails(
-        exception: e,
-        stack: stack,
-        library: 'cache manager library',
-        context: ErrorDescription('while writing file'),
-        informationCollector: () => [
-          StringProperty("File path", file.path),
-        ],
-        silent: !kDebugMode,
-      ));
+      // ENOSPC
+      if (e.osError?.errorCode == 28) {
+        unawaited(_trimExpiredEntries());
+      } else {
+        FlutterError.reportError(FlutterErrorDetails(
+          exception: e,
+          stack: stack,
+          library: 'cache manager library',
+          context: ErrorDescription('while writing file'),
+          informationCollector: () => [StringProperty("File path", file.path)],
+          silent: !kDebugMode,
+        ));
+      }
     }
   }
 
   Future<BinaryResource> _loadCache(String key) async {
     BinaryResource resource;
     File file = File(await getSavePath(key));
-    if (await file.exists()) {
+    if (file.existsSync()) {
       // promote this file.
       await _touch(file);
       resource = BinaryResource.file(key, file);
@@ -265,7 +282,8 @@ class DiskCacheStore {
 
   String getFileName(String key) => "$key$_ext";
 
-  String cacheKeyFromFile(File file) => path.basenameWithoutExtension(file.path);
+  String cacheKeyFromFile(File file) =>
+      path.basenameWithoutExtension(file.path);
 
   Future<String> getSubdirs(String key) async {
     Directory folder = await baseDir;
@@ -295,7 +313,8 @@ class DiskCacheStore {
         _updatingFuture = _updateFileCacheSize();
         _updatingFuture.whenComplete(() {
           assert(() {
-            print("Cached file stats: size ${stats.size}, count ${stats.count}");
+            print(
+                "Cached file stats: size ${stats.size}, count ${stats.count}");
             return true;
           }());
           _updatingFuture = null;
@@ -306,9 +325,11 @@ class DiskCacheStore {
   }
 
   Future _updateFileCacheSize() async {
-    var files = await listFilesAndMap(await baseDir, (f) => f.length());
+    var files = await listFilesAndMap(
+        await baseDir, (f) => f.length().catchError((_) => 0));
     var count = files.length;
-    var size = count == 0 ? 0 : files.map((e) => e.value).reduce((a, b) => a + b);
+    var size =
+        count == 0 ? 0 : files.map((e) => e.value).reduce((a, b) => a + b);
     if (stats.size != size || stats.count != count) {
       stats.set(size, count);
     }
@@ -359,13 +380,14 @@ class DiskCacheStore {
     }
     if (byTime) {
       DateTime expiredTime = DateTime.now().subtract(_maxAge);
-      expiredIndex = sortedList.indexWhere((entry) => entry.value.isAfter(expiredTime));
+      expiredIndex =
+          sortedList.indexWhere((entry) => entry.value.isAfter(expiredTime));
     }
 
     int sumSize = 0;
     int count = 0;
     int index = 0;
-    for (var file in sortedList) {
+    for (final file in sortedList) {
       if (bySize && sumSize > freeSize) break;
       if (byTime && index >= expiredIndex) break;
       index++;
@@ -395,12 +417,13 @@ class DiskCacheStore {
   }
 
   Future<List<MapEntry<File, DateTime>>> _getSortedEntries() async {
-    var files = await listFilesAndMap(await baseDir, (f) => f.lastModified());
+    var files = await listFilesAndMap(await baseDir,
+        (f) => f.lastModified().catchError((_) => DateTime.now()));
     if (files.isEmpty) return const [];
     var futureTime = DateTime.now().add(const Duration(hours: 2));
     var sortedList = <MapEntry<File, DateTime>>[];
     var listToSort = <MapEntry<File, DateTime>>[];
-    for (var file in files) {
+    for (final file in files) {
       // this file was written with future timestamp
       if (file.value.isAfter(futureTime)) {
         sortedList.add(file);
@@ -458,7 +481,8 @@ class RemoteResourceDownloader {
 
   RemoteResourceDownloader(this.store, this.fetcher);
 
-  Future<BinaryResource> download(String key, String url, {Map<String, String> headers}) {
+  Future<BinaryResource> download(String key, String url,
+      {Map<String, String> headers}) {
     if (_mem.containsKey(url)) {
       return _mem[url].future;
     }
@@ -474,7 +498,8 @@ class RemoteResourceDownloader {
     return completer.future;
   }
 
-  BinaryResource _handleResponse(String key, String url, FileFetcherResponse response) {
+  BinaryResource _handleResponse(
+      String key, String url, FileFetcherResponse response) {
     if (response.statusCode == 200) {
       Uint8List body = response.bodyBytes;
       if (body == null) {
@@ -484,7 +509,8 @@ class RemoteResourceDownloader {
       store.put(resource);
       return resource;
     }
-    throw HttpException("Invalid status: ${response.statusCode}", uri: Uri.parse(url));
+    throw HttpException("Invalid status: ${response.statusCode}",
+        uri: Uri.parse(url));
   }
 }
 
@@ -523,7 +549,8 @@ Future<List<File>> listFiles(Directory dir) {
   });
 }
 
-Future<List<MapEntry<File, E>>> listFilesAndMap<E>(Directory dir, FutureOr<E> map(File file)) {
+Future<List<MapEntry<File, E>>> listFilesAndMap<E>(
+    Directory dir, FutureOr<E> map(File file)) {
   return dir.exists().then((exists) {
     if (exists) {
       return dir

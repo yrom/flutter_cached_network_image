@@ -18,7 +18,8 @@ abstract class CacheManager {
   Stream<CachedImage> getImage(String url, {Map<String, String> headers});
 
   /// Try to get the cached image file. Download form [url] when missing.
-  Future<BinaryResource> getImageResource(String url, {Map<String, String> headers});
+  Future<BinaryResource> getImageResource(String url,
+      {Map<String, String> headers});
 }
 
 /// Binary resource for decoding image.
@@ -41,6 +42,8 @@ abstract class BinaryResource {
   /// bytes length
   int get length;
 
+  @override
+  int get hashCode => id.hashCode;
 
   @override
   bool operator ==(Object other) {
@@ -87,9 +90,6 @@ class ByteDataResource implements BinaryResource {
   int get length => data.lengthInBytes;
 
   @override
-  int get hashCode => getCrc32(readAsBytesSync());
-
-  @override
   String toString() {
     return "ByteDataResource {$id, bytebuff:$data}";
   }
@@ -123,9 +123,6 @@ class FileResource implements BinaryResource {
       return 0;
     }
   }
-
-  @override
-  int get hashCode => file.hashCode;
 
   @override
   String toString() {
